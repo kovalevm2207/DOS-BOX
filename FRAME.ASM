@@ -59,8 +59,6 @@ Start:		; надо установить сегментный регистр дл
             call GetStrings
 
 			call ClearConsol  		; очистили консоль
-			call CalcShift          ; посчитали важную цифру для отрисовки рамки
-			call SetBackground		; сделали фон
 			call DrawFrame			; нарисовали рамку
 			call WriteStr			; вывели строчку
 
@@ -150,20 +148,24 @@ GetArgs proc
             mov di, 082h
 
             call GetColor
+            jc @@End
             call CheckSpace
             jc @@End
             mov BACKGROUND_CLR, ah
 
             call GetColor
+            jc @@End
             call CheckSpace
             jc @@End
             mov FRAME_CLR, ah
 
 			call GetFrameSym
+            jc @@End
             call CheckSpace
             jc @@End
 
 			call GetColor
+            jc @@End
             call CheckSpace
             jc @@End
             mov STRING_CLR, ah
@@ -247,9 +249,12 @@ GetColor endp
 CheckSpace proc
             inc di
             cmp ds: byte ptr [di], ' '
-            je @@End
+            je @@Next
             stc
-      @@End:inc di
+     @@Next:inc di
+			cmp di, ' '
+			je @@Next
+
             ret
 CheckSpace endp
 
@@ -403,47 +408,6 @@ GetStrings proc
 				ret
 GetStrings endp
 
-;----------------------------------------------------------------------------------------
-; Описание: (CalcShift) высчитывает смещение от начала строки до того места, в котором
-;		    если бы располагалась первая буква строчки, то вся строчка была бы посередине
-;
-; Входные параметры: dx - содержит длину максимальной строки аргументов командной строки
-;
-; Возвращаемое значение: bp - содержит нужное смещение
-;
-; Ожидаемое состояние: --//--
-;
-; Испорченные регистры: --//--
-;----------------------------------------------------------------------------------------
-CalcShift proc
-				; Вычислим смещение от начала строки текстовой видеопамяти (dx)
-				xor bp, bp
-				mov bp, dx 		  ; bp = dx
-				and bp, 0fffeh	  ; bp = bp*2 (bp = (dx%2)*2 )
-				neg bp			  ; bp = -bp  (bp = -(dx%2)*2 )
-				add bp, 80d		  ; bp += 80  (bp = 80-(dx%2)*2 )
-
-				ret
-CalcShift endp
-
-;------------------------------------------------------------------------------------------
-; Описание: (SetBackground) Устанавливает фон для рамки
-;
-; Входные параметры: es = 0b800h (Указывает на текстовую видеопамять)
-;					 dx - длина самой длиной строки
-;					 si - количество строк
-;					 bp - содержит смещение от начала строки видеопамяти
-;						  до первого символа аргументов командной строки;
-;
-; Возвращаемое значение: --//--
-;
-; Ожидаемое состояние: нужная часть видеопамяти заполнена пробелами цвета фона рамки
-;
-; Испорченные регистры: ax - вычисление смещения хранящегося в di
-;						   - символ и его атрибут
-;						bx - счетчик цикла
-;						cx - счетчик для rep
-;						di - смещение в видеопамяти
 ;------------------------------------------------------------------------------------------
 ;Число строк фона = si + 6  bx+10d-((si+1)//2)
 ;               si == 3:                         si == 2:                         si == 1:                         si == 0:
@@ -459,235 +423,135 @@ CalcShift endp
 ;--> 15    ****************       --> 15    ****************       --> 15    ****************       --> 15    ****************
 ;--> 16    ****************       --> 16    ****************       --> 16                           --> 16
 ;     \________ то на сколько надо умножить 160
-SetBackground   proc
-			sub bp, 8d ; обновим смещение именно для фона
-
-			mov ax, si			; ax = si
-			add ax, 1           ; ax = si+1
-			shr ax, 1			; ax = (si+1)//2
-			neg ax				; ax = -((si+1)//2)
-			add ax, 10d			; ax = 10d-((si+1)//2)
-			mov bx, 160d
-			mul bl				; ax = 160d*(10d-((si+1)//2))
-			add ax, bp			; ax = bp+160d*(10d-((si+1)//2))
-			mov di, ax			; di = ax
-
-			xor bx, bx
-			add si, 4d ; установим количество строк для фона
-
-			push bp
-	Lines:		; Устанавливаем символ и атрибут
-				mov bp, offset BACKGROUND_SYM
-				mov al, [bp]
-				mov bp, offset BACKGROUND_CLR
-				mov ah, [bp]
-
-				; cx = StrLength + 10 - количество повторов (длина фона рамки)
-				mov cx, dx
-				add cx, 8d
-
-				rep stosw
-
-				inc bx
-				add di, 160d-8d*2d
-				sub di, dx
-				sub di, dx
-			cmp bx, si
-			jle Lines
-
-			pop bp
-			add bp, 8d ; возвращаем стандартное смещение
-			sub si, 4d ; возвращаем обычное количество строк
-			ret
-SetBackground endp
-
 ;----------------------------------------------------------------------------------------
-; Описание: (DrawFrame) вызывает функции DrawFrameTop DrawColumns DrawFrameDown
-;
+; Описание: (DrawFrame) рисует рамку на нужном месте в видеопамяти
 ; Входные параметры: es = 0b800h (Указывает на текстовую видеопамять)
-;					 bp - содержит смещение от начала строки до того места, в котором
-;		    			  если бы располагалась первая буква строчки, то вся строчка была бы посередине
 ;					 dx - содержит длину максимальной строки аргументов командной строки
 ;					 si - количество строк
 ;
 ; Возвращаемое значение: --//--
 ;
-; Ожидаемое состояние: на фоне изображена рамка из соответствующих символов
+; Ожидаемое состояние: CF = 0
 ;
-; Испорченные регистры: ax, cx, di
+; Испорченные регистры: ax, cx, di, bx
 ;----------------------------------------------------------------------------------------
 DrawFrame proc
-			call DrawFrameTop
-			call DrawFrameColumns
-			call DrawFrameDown
+			mov di, dx
+			and di, 0fffeh
+			neg di
+			add di, 72d
+
+			mov ax, si
+			inc ax
+			shr ax, 1
+			neg ax
+			add ax, 10d
+			mov bl, 160d
+			mul bl
+			add di, ax 	      ; 72-(dx//2)*2+160d*(10d-((si+1)//2)
+
+			push di
+			mov al, BACKGROUND_SYM
+			mov ah, BACKGROUND_CLR
+			mov cx, dx
+			add cx, 8
+			rep stosw
+			pop di
+
+			xor bx, bx
+    	@@Next: inc bx
+				add di, 160d
+				push di
+				mov cx, 2
+				rep stosw
+
+				add dx, 2
+				cmp bx, 1
+				je @@TOP1
+
+					cmp bx, dx
+					je @@DOWN1
+
+						mov al, FRAME_L
+						jmp @@CNT1
+
+		   @@DOWN1: mov al, L_D_CORNER
+					jmp @@CNT1
+
+		@@TOP1: mov al, L_U_CORNER
+
+		@@CNT1: sub dx, 2
+				mov ah, FRAME_CLR
+				mov es: word ptr [di], ax
+
+				add di, 2
+
+				add dx, 2
+				cmp bx, 1
+				je @@TOP2
+
+					cmp bx, dx
+					je @@DOWN2
+
+						mov al, BACKGROUND_SYM
+						mov ah, BACKGROUND_CLR
+						jmp @@CNT2
+
+		   @@DOWN2: mov al, FRAME_D
+					jmp @@CNT2
+
+	    @@TOP2: mov al, FRAME_T
+				jmp @@CNT2
+
+	 @@SubNext: jmp @@Next
+
+		@@CNT2: sub dx, 2
+		 		mov cx, dx
+				add cx, 2
+				rep stosw
+
+				add dx, 2
+				cmp bx, 1
+				je @@TOP3
+
+					cmp bx, dx
+					je @@DOWN3
+
+						mov al, FRAME_R
+						jmp @@CNT3
+
+		   @@DOWN3: mov al, R_D_CORNER
+					jmp @@CNT3
+
+	    @@TOP3: mov al, R_U_CORNER
+
+		@@CNT3: sub dx, 2
+				mov ah, FRAME_CLR
+				mov es: word ptr [di], ax
+
+				add di, 2
+				mov al, BACKGROUND_SYM
+				mov ah, BACKGROUND_CLR
+				mov cx, 2
+				rep stosw
+
+				pop di
+				add dx, 2
+				cmp bx, dx
+				pushf
+				sub dx, 2
+				popf
+				jb @@SubNext
+
+			add di, 160d
+			mov al, BACKGROUND_SYM
+			mov ah, BACKGROUND_CLR
+			mov cx, dx
+			add cx, 8
+			rep stosw
 
 			ret
 DrawFrame endp
-
-;----------------------------------------------------------------------------------------
-; Описание: (DrawFrameTop) рисует верхнюю часть рамки из соответствующих символов
-;
-; Входные параметры: es = 0b800h (Указывает на текстовую видеопамять)
-;					 bp - содержит смещение от начала строки до того места, в котором
-;		    			  если бы располагалась первая буква строчки, то вся строчка была бы посередине;
-;					 dx - содержит длину максимальной строки аргументов командной строки
-;					 si - количество строк
-;
-; Возвращаемое значение: di - содержит смещение указывающее на верхний правый угол рамки
-;
-; Ожидаемое состояние: на фоне изображена верхняя часть рамки из соответствующих символов
-;
-; Испорченные регистры: ax - содержит символ и его атрибут
-;						cx - счетчик для rep
-;----------------------------------------------------------------------------------------
-DrawFrameTop proc
-			; рисуем левый верхний угол
-			mov ax, si			   ;| ax = si
-			add ax, 1			   ;| ax = si+1
-			shr ax, 1			   ;| ax = ((si+1)//2)
-			neg ax				   ;| ax = -((si+1)//2)
-			add ax, 11d			   ;| ax = 11d-((si+1)//2)
-			mov bx, 160d
-			mul bl				   ;| ax = 160d*(11d-((si+1)//2))
-			sub ax, 4d     		   ;| ax = 160d*(11d-((si+1)//2))-4d
-			add ax, bp             ;| ax = 160d*(11d-((si+1)//2))-4d+bp
-			mov di, ax			   ;| устанавливаем начальное смещение
-
-			push si
-
-			mov si, offset L_U_CORNER
-			mov al, [si]
-			mov es: byte ptr [di],   al
-
-			mov si, offset FRAME_CLR
-			mov ah, [si]
-			mov es: byte ptr [di+1], ah
-
-			; рисуем верхнюю грань
-			mov si, offset FRAME_T
-
-			mov al, [si]     ;| установили символ
- 			;|mov ah, ah        и атрибут
-
-			mov cx, dx			;|
-			add cx, 2 			;| количество повторений
-
-			add di, 2d			; обновляем смещение
-			rep stosw
-
-			; рисуем правый верхний угол
-			mov si, offset R_U_CORNER
-			mov al, [si]
-			mov es: byte ptr [di],   al
-
-			mov es: byte ptr [di+1], ah
-
-			pop si
-			ret
-DrawFrameTop endp
-
-;----------------------------------------------------------------------------------------
-; Описание: (DrawFrameColumns) рисует боковые части рамки из соответствующих символов
-;
-; Входные параметры: es = 0b800h (Указывает на текстовую видеопамять)
-;					 bp - содержит смещение от начала строки до того места, в котором
-;		    			  если бы располагалась первая буква строчки, то вся строчка была бы посередине;
-;					 dx - содержит длину максимальной строки аргументов командной строки
-;					 si - количество строк
-;					 di - содержит смещение указывающее на верхний правый угол рамки
-;
-; Возвращаемое значение: di - содержит смещение указывающее на нижний левый угол рамки
-;
-; Ожидаемое состояние: на фоне изображена верхняя часть рамки из соответствующих символов
-;
-; Испорченные регистры: cx - значение для прерывания цикла
-;----------------------------------------------------------------------------------------
-DrawFrameColumns proc
-			push bp
-			xor cx, cx
-
-	Column:
-			inc cx
-			add di, 160-3*2				;| переходим на следующий левый столбец
-			sub di, dx					;|
-			sub di, dx					;|
-
-			mov bp, offset FRAME_L
-			mov al, [bp]
-			mov es: byte ptr [di],   al
-
-			mov es: byte ptr [di+1], ah
-
-			add di, 3*2					;| переходим к правому столбцу
-			add di, dx					;|
-			add di, dx					;|
-
-			mov bp, offset FRAME_R
-			mov al, [bp]
-			mov es: byte ptr [di],   al
-
-			mov es: byte ptr [di+1], ah
-
-			cmp cx, si
-			jbe  Column
-
-			pop bp
-			ret
-DrawFrameColumns endp
-
-;----------------------------------------------------------------------------------------
-; Описание: (DrawFrameDown) рисует нижнюю часть рамки из соответствующих символов
-;
-; Входные параметры: es = 0b800h (Указывает на текстовую видеопамять)
-;					 bp - содержит смещение от начала строки до того места, в котором
-;		    			  если бы располагалась первая буква строчки, то вся строчка была бы посередине;
-;					 dx - содержит длину максимальной строки аргументов командной строки
-;					 di - содержит смещение указывающее на нижний левый угол рамки
-;
-; Возвращаемое значение: --//--
-;
-; Ожидаемое состояние: на фоне изображена верхняя часть рамки из соответствующих символов
-;
-; Испорченные регистры: ax - символ и его атрибут
-;						cx - счетчик для rep
-;						di - смещение в видеопамяти
-;----------------------------------------------------------------------------------------
-DrawFrameDown proc
-			push si
-
-			; рисуем левый нижний угол
-			add di, 160-3*2   			;| обновляем смещение
-			sub di, dx					;|
-			sub di, dx					;|
-
-			mov si, offset L_D_CORNER
-			mov al, [si]
-			mov es: byte ptr [di],   al
-
-			mov es: byte ptr [di+1], ah
-
-			; рисуем нижнюю грань
-			mov si, offset FRAME_D
-			mov al, [si]     ;| установили символ
-
-			;|mov ah, ah        и атрибут
-
-			mov cx, 2 			;| количество повторений
-			add cx, dx			;|
-
-			add di, 2d			; обновляем смещение
-			rep stosw
-
-			; рисуем правый нижний угол
-			mov si, offset R_D_CORNER
-			mov al, [si]
-			mov es: byte ptr [di],   al
-
-			mov es: byte ptr [di+1], ah
-
-			pop si
-			ret
-DrawFrameDown endp
 
 ;-----------------------------------------------------------------------------------------
 ; Описание: по центру экрана выводит строчку с соответствующим фоном
@@ -726,7 +590,11 @@ WriteStr proc
 
 			    	push bp				   ;| сохранили в стек адрес начала строки
 
-			    	call CalcShift		   ;| положит в bp нужное значение смещения исходя из длины строки в dx
+					xor bp, bp
+					mov bp, dx
+					and bp, 0fffeh
+					neg bp
+					add bp, 80d		  	   ; 80-(dx%2)*2 )
 			    	add ax, bp             ;| устанавливаем смещение для первого символа строки
 
 					pop bp                 ;| возвращаем из стека адрес начала строки
