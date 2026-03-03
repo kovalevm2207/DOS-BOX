@@ -46,28 +46,51 @@ Start:  xor ax, ax
         int 27h
 
 New08   proc
-        ; Устанавливаем флаг, показывающий срабатывание таймера
-        mov cs: byte ptr [FLAG], 1
-
         ; Вызываем стандартное прерывание 08h
         pushf                   ; Сохраняем так как call этого не делает, а в конце стандартного обработчика стоит iret
         call dword ptr cs:[Old_08]
 
-        iret
+        cmp cs: byte ptr [R_FLAG], 1
+        jne @@EOI
+
+        ; Здесь можно будет творить что захотим
+
+
+@@EOI:  iret
 New08   endp
 
+
+
 New09   proc
+        ; Считываем скан код вводимого символа и сохраняем в стеке перед вызовом стандартного прерывания
+        in al, 60h
+        cmp al, 1Dh     ; ScanCode(Нажатие    Ctrl)
+        jne  @@NOT_C
+            mov cs: byte ptr [CTRL_FLAG], 1
+            jmp @@HK
+@@NOT_C:cmp al, 21h     ; ScanCode(Нажатие       F)
+        jne @@NOT_F
+            cmp cs: byte ptr [CTRL_FLAG], 1
+            jne NOT_HK
+                mov cs: byte ptr [F_FLAG], 1
+                jmp @@HK
+
+NOT_HK: mov cs: byte ptr [CTRL_FLAG], 0
+        mov cs: byte ptr [F_FLAG], 0
+
         ; Вызываем стандартное прерывание 08h
         pushf                   ; Сохраняем так как call этого не делает, а в конце стандартного обработчика стоит iret
         call dword ptr cs:[Old_09]
 
-        cmp cs: byte ptr [FLAG], 1
-        jne @@EOI
+        jmp @@EOI
 
-        ; Сбрасываем флаг
-        mov cs: byte ptr [FLAG], 0
+@@HK:   mov al, cs: byte ptr [CTRL_FLAG]
+        and al, cs: byte ptr [F_FLAG]
+        cmp al, 1
+        jne NOT_HK
 
-        ; Здесь можно будет творить что захотим
+        ; Change RenderingFlag
+        xor cs: byte ptr [R_FLAG], 1
 
 @@EOI:  iret
 New09   endp
@@ -75,9 +98,11 @@ New09   endp
 
 .data
 
-FLAG    db 0
-Old_08   dd 1 dup(?)
-Old_09   dd 1 dup(?)
+R_FLAG      db 0 ; Rendering Flag
+F_FLAG      db 0
+CTRL_FLAG   db 0
+Old_08      dd 1 dup(?)
+Old_09      dd 1 dup(?)
 
 EOP:
 
