@@ -1,8 +1,6 @@
 LOCALS
 .model tiny
 
-; lotsp stoswsp
-
 save_int MACRO int_name
         mov ax, es: word ptr [bx]
         mov cs: word ptr int_name, ax          ; Запоминаем смещение
@@ -30,7 +28,7 @@ ShowWord MACRO
                 mov bx, 0f000h              ; mask
 
                 xor cx, cx
-        @@Next:mov ax, cs: word ptr [bp]   ; value
+        @@Next:         mov ax, cs: word ptr [bp]   ; value
                         and ax, bx                  ; оставляем нужные четыре бита
                         shr bx, 04h                 ; меняем маску
                         mov cl, ch
@@ -39,14 +37,15 @@ ShowWord MACRO
                         shl cl, 2
                         shr ax, cl            ; сдвигаем данные
 
+                        mov ah, cs: byte ptr [STRING_CLR]
                         cmp al, 09h
                         jbe @@Num
                                 add al, 'A'-0ah
-                                mov es: byte ptr[di], al
+                                mov es: word ptr[di], ax
                                 jmp @@Cond
 
                 @@Num:  add al, '0'
-                        mov es: byte ptr[di], al
+                        mov es: word ptr[di], ax
 
                 @@Cond: add di, 2
                         inc ch
@@ -82,10 +81,18 @@ Start:  xor ax, ax
         int 27h
 
 New08   proc
-        mov cs: word ptr[AX_VAL], ax
-        mov cs: word ptr[BX_VAL], bx
-        mov cs: word ptr[CX_VAL], cx
-        mov cs: word ptr[DX_VAL], dx
+        mov cs: word ptr [AX_VAL], ax
+        mov cs: word ptr [BX_VAL], bx
+        mov cs: word ptr [CX_VAL], cx
+        mov cs: word ptr [DX_VAL], dx
+        mov cs: word ptr [SI_VAL], si
+        mov cs: word ptr [DI_VAL], di
+        mov cs: word ptr [SP_VAL], sp
+        mov cs: word ptr [DS_VAL], ds
+        mov cs: word ptr [ES_VAL], es
+        mov cs: word ptr [SS_VAL], ss
+        mov cs: word ptr [CS_VAL], cs
+
         ; Вызываем стандартное прерывание 08h
         pushf                   ; Сохраняем так как call этого не делает, а в конце стандартного обработчика стоит iret
         call dword ptr cs:[Old_08]
@@ -98,7 +105,7 @@ New08   proc
 
         mov si, 0b800h
         mov es, si
-        mov si, 4
+        mov si, 11
         mov dx, 7
         clc
 
@@ -259,14 +266,15 @@ WriteStr proc
                 mov bp, offset AX_TEXT
                 xor cx, cx
 
-        @@Next:         mov al, cs: byte ptr [bp]
-                        mov es: byte ptr [di], al
+        @@Next:         mov ah, cs: byte ptr [STRING_CLR]
+                        mov al, cs: byte ptr [bp]
+                        mov es: word ptr [di], ax
 
                         add di, 2
                         inc bp
 
                         mov al, cs: byte ptr [bp]
-                        mov es: byte ptr [di], al
+                        mov es: word ptr [di], ax
 
                         add di, 4
                         inc bp
@@ -369,6 +377,27 @@ CX_VAL          dw 9ABCh
 
 DX_TEXT         db 'dx'
 DX_VAL          dw 0DEFh
+
+SI_TEXT         db 'si'
+SI_VAL          dw 0000h
+
+DI_TEXT         db 'di'
+DI_VAL          dw 0000h
+
+SP_TEXT         db 'sp'
+SP_VAL          dw 0000h
+
+DS_TEXT         db 'ds'
+DS_VAL          dw 0000h
+
+ES_TEXT         db 'es'
+ES_VAL          dw 0000h
+
+SS_TEXT         db 'ss'
+SS_VAL          dw 0000h
+
+CS_TEXT         db 'cs'
+CS_VAL          dw 0000h
 
 EOP:
 
