@@ -187,7 +187,7 @@ GetArgs endp
 ;----------------------------------------------------------------------------------------
 GetColor proc
         xor ax, ax
-        xor cl, cl
+        mov cl, 4d
 
  @@Next:mov al, ds: byte ptr [di]
 
@@ -226,9 +226,9 @@ GetColor proc
         add ah, al
         jmp @@Act
 
-  @@Act:cmp cl, 4d
-        jae @@End
-        add cl, 4d
+  @@Act:cmp cl, 0
+        jbe @@End
+        sub cl, 4d
         inc di
         jmp @@Next
 
@@ -436,122 +436,115 @@ GetStrings endp
 ; Испорченные регистры: ax, cx, di, bx
 ;----------------------------------------------------------------------------------------
 DrawFrame proc
-			mov di, dx
-			and di, 0fffeh
-			neg di
-			add di, 72d
+		mov di, dx
+		and di, 0fffeh
+		neg di
+		add di, 72d
 
-			mov ax, si
-			inc ax
-			shr ax, 1
-			neg ax
-			add ax, 10d
-			mov bl, 160d
-			mul bl
-			add di, ax 	      ; 72-(dx//2)*2+160d*(10d-((si+1)//2)
+		mov ax, si
+		inc ax
+		shr ax, 1
+		neg ax
+		add ax, 10d
+		mov bl, 160d
+		mul bl
+		add di, ax 	      ; 72-(dx//2)*2+160d*(10d-((si+1)//2)
 
-			push di
-			mov al, BACKGROUND_SYM
-			mov ah, BACKGROUND_CLR
-			mov cx, dx
-			add cx, 8
-			rep stosw
-			pop di
+		push di
+		mov al, cs: byte ptr [BACKGROUND_SYM]
+		mov ah, cs: byte ptr [BACKGROUND_CLR]
+		mov cx, dx
+		add cx, 8
+		rep stosw
+		pop di
 
-			xor bx, bx
-    	@@Next: inc bx
+		add si, 2
+		xor bx, bx
+@@Next:         inc bx
 				add di, 160d
 				push di
 				mov cx, 2
 				rep stosw
 
-				add dx, 2
+				mov ah, cs: byte ptr [FRAME_CLR]
+
 				cmp bx, 1
 				je @@TOP1
 
-					cmp bx, dx
-					je @@DOWN1
+						cmp bx, si
+						ja @@DOWN1
 
-						mov al, FRAME_L
+                		        mov al, cs: byte ptr [FRAME_L]
+								jmp @@CNT1
+
+		@@DOWN1:        mov al, cs: byte ptr [L_D_CORNER]
 						jmp @@CNT1
 
-		   @@DOWN1: mov al, L_D_CORNER
-					jmp @@CNT1
+		@@TOP1: mov al, cs: byte ptr [L_U_CORNER]
 
-		@@TOP1: mov al, L_U_CORNER
-
-		@@CNT1: sub dx, 2
-				mov ah, FRAME_CLR
-				mov es: word ptr [di], ax
+		@@CNT1: mov es: word ptr [di], ax
 
 				add di, 2
 
-				add dx, 2
 				cmp bx, 1
 				je @@TOP2
 
-					cmp bx, dx
-					je @@DOWN2
+						cmp bx, si
+						ja @@DOWN2
+								mov ah, cs: byte ptr [BACKGROUND_CLR]
+								mov al, cs: byte ptr [BACKGROUND_SYM]
+								jmp @@CNT2
 
-						mov al, BACKGROUND_SYM
-						mov ah, BACKGROUND_CLR
+	        			@@DOWN2:mov al, cs: byte ptr [FRAME_D]
 						jmp @@CNT2
 
-		   @@DOWN2: mov al, FRAME_D
-					jmp @@CNT2
-
-	    @@TOP2: mov al, FRAME_T
+		        @@TOP2: mov al, cs: byte ptr [FRAME_T]
 				jmp @@CNT2
 
 	 @@SubNext: jmp @@Next
 
-		@@CNT2: sub dx, 2
-		 		mov cx, dx
+		@@CNT2: mov cx, dx
 				add cx, 2
 				rep stosw
 
-				add dx, 2
+				mov ah, cs: byte ptr [FRAME_CLR]
+
 				cmp bx, 1
 				je @@TOP3
 
-					cmp bx, dx
-					je @@DOWN3
+						cmp bx, si
+						ja @@DOWN3
 
-						mov al, FRAME_R
+								mov al, cs: byte ptr [FRAME_R]
+								jmp @@CNT3
+
+	        			@@DOWN3:mov al, cs: byte ptr [R_D_CORNER]
 						jmp @@CNT3
 
-		   @@DOWN3: mov al, R_D_CORNER
-					jmp @@CNT3
+	        	@@TOP3: mov al, cs: byte ptr [R_U_CORNER]
 
-	    @@TOP3: mov al, R_U_CORNER
-
-		@@CNT3: sub dx, 2
-				mov ah, FRAME_CLR
-				mov es: word ptr [di], ax
+		@@CNT3: mov es: word ptr [di], ax
 
 				add di, 2
-				mov al, BACKGROUND_SYM
-				mov ah, BACKGROUND_CLR
+				mov ah, cs: byte ptr [BACKGROUND_CLR]
+				mov al, cs: byte ptr [BACKGROUND_SYM]
 				mov cx, 2
 				rep stosw
 
 				pop di
-				add dx, 2
-				cmp bx, dx
-				pushf
-				sub dx, 2
-				popf
-				jb @@SubNext
+		cmp bx, si
+		jbe @@SubNext
 
-			add di, 160d
-			mov al, BACKGROUND_SYM
-			mov ah, BACKGROUND_CLR
-			mov cx, dx
-			add cx, 8
-			rep stosw
+        sub si, 2
+		add di, 160d
+		mov al, cs: byte ptr [BACKGROUND_SYM]
+		mov cx, dx
+		add cx, 8
+		rep stosw
 
-			ret
+                ret
 DrawFrame endp
+
 
 ;-----------------------------------------------------------------------------------------
 ; Описание: по центру экрана выводит строчку с соответствующим фоном
