@@ -254,7 +254,7 @@ WriteStr proc
                 xor dx, dx              ; - counter
 
                 mov bp, sp
-                add bp, 4               ; skip ret ptr
+                add bp, 2               ; skip ret ptr
         @@Next:         mov ah, cs: byte ptr [STRING_CLR]
                         mov al, cs: byte ptr [si]
                         mov es: word ptr [di], ax
@@ -269,7 +269,7 @@ WriteStr proc
                         inc si
 
                         ShowWord
-                        add bp, 2d      ; go to the value of the next register's
+                        add bp, 2      ; go to the value of the next register's
 
                         add di, (80-7)*2
                         inc dx
@@ -286,9 +286,11 @@ WriteStr endp
 ;                      Old09 - содержит значение из таблицы прерываний на для исполняе-
 ;                      мого кода стандартного прерывания
 ; Возвращаемое значение: --//--
-; Испорченные регистры: al + см. описание стандартного 09h DOS прерывания
+; Испорченные регистры: см. описание стандартного 09h DOS прерывания
 ;---------------------------------------------------------------------------------------
 New09   proc
+        push ax
+
         in  al, 60h
         cmp al, 1Dh     ; ScanCode(Нажатие    Ctrl)
         jne  @@NOT_C
@@ -322,7 +324,8 @@ New09   proc
         mov al, 20h
         out 20h, al
 
-@@EOI:  iret
+@@EOI:  pop ax
+        iret
 New09   endp
 
 
