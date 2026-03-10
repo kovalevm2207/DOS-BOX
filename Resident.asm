@@ -79,15 +79,23 @@ Start:  xor ax, ax
         save_int Old_09
         change_int_on New09
 
+        int 08h
+
         ; Завершаем программу оставляя ее в памяти (резидент)
         mov dx, offset EOP
         int 27h
 
-New08   proc    ; pushf     - уменьшает sp на 2
-                ; push ip   - уменьшает sp на 2
-                ; push cs   - уменьшает sp на 2
-
-        push sp ss es ds bp di si dx cx bx ax
+New08   proc    ; pushf     ; sp = real_sp - 2
+                ; push ip   ; sp = real_sp - 4
+                ; push cs   ; sp = real_sp - 6
+        sub sp, 2           ; освобождаем места, для хранения sp => sp_save_ptr = real_sp - 6
+        push ss es ds bp    ; sp = real_sp - 16 <----<----<-----<
+        add sp, 10          ; sp = real_sp - 6 = sp_save_ptr    |
+        mov bp, sp          ;                                   |
+        add bp, 6           ; bp = real_sp                      ^
+        push bp             ; sp = real_sp - 8                  |
+        sub sp, 8           ; sp = real_sp - 16 --->---->---->--^
+        push di si dx cx bx ax
         ; Вызываем стандартное прерывание 08h
         pushf                   ; Сохраняем так как call этого не делает, а в конце стандартного обработчика стоит iret
         call dword ptr cs:[Old_08]
@@ -103,6 +111,7 @@ New08   proc    ; pushf     - уменьшает sp на 2
         call WriteStr
 
 @@EOI:  pop ax bx cx dx si di bp ds es ss sp
+        sub sp, 6
 
         iret    ; pop cs
                 ; pop ip
