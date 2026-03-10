@@ -1,6 +1,9 @@
 LOCALS
 .model tiny
 
+REG_NUM         equ 13
+STR_LEN         equ 7
+
 save_int MACRO int_name
         mov ax, es: word ptr [bx]
         mov cs: word ptr int_name, ax          ; Запоминаем смещение
@@ -28,7 +31,7 @@ ShowWord MACRO
                 mov bx, 0f000h              ; mask
 
                 xor cx, cx
-        @@Next:         mov ax, cs: word ptr [bp]   ; value
+        @@Next:         mov ax, ss: word ptr [bp]   ; value
                         and ax, bx                  ; оставляем нужные четыре бита
                         shr bx, 04h                 ; меняем маску
                         mov cl, ch
@@ -80,19 +83,11 @@ Start:  xor ax, ax
         mov dx, offset EOP
         int 27h
 
-New08   proc
-        mov cs: word ptr [AX_VAL], ax
-        mov cs: word ptr [BX_VAL], bx
-        mov cs: word ptr [CX_VAL], cx
-        mov cs: word ptr [DX_VAL], dx
-        mov cs: word ptr [SI_VAL], si
-        mov cs: word ptr [DI_VAL], di
-        mov cs: word ptr [SP_VAL], sp
-        mov cs: word ptr [DS_VAL], ds
-        mov cs: word ptr [ES_VAL], es
-        mov cs: word ptr [SS_VAL], ss
-        mov cs: word ptr [CS_VAL], cs
+New08   proc    ; pushf     - уменьшает sp на 2
+                ; push ip   - уменьшает sp на 2
+                ; push cs   - уменьшает sp на 2
 
+        push sp ss es ds bp di si dx cx bx ax
         ; Вызываем стандартное прерывание 08h
         pushf                   ; Сохраняем так как call этого не делает, а в конце стандартного обработчика стоит iret
         call dword ptr cs:[Old_08]
@@ -100,43 +95,37 @@ New08   proc
         cmp cs: byte ptr [R_FLAG], 1
         jne @@EOI
 
-        pushf
-        push ax bx cx dx bp di si es
-
-        mov si, 0b800h
-        mov es, si
-        mov si, 11
-        mov dx, 7
+        mov ax, 0b800h
+        mov es, ax
         clc
 
         call DrawFrame
         call WriteStr
 
-        pop es si di bp dx cx bx ax
-        popf
+@@EOI:  pop ax bx cx dx si di bp ds es ss sp
 
-@@EOI:  iret
+        iret    ; pop cs
+                ; pop ip
+                ; popf
 New08   endp
 
 ;----------------------------------------------------------------------------------------
 ; Описание: (DrawFrame) рисует рамку на нужном месте в видеопамяти
 ; Входные параметры: es = 0b800h (Указывает на текстовую видеопамять)
-;					 dx - содержит длину максимальной строки аргументов командной строки
-;					 si - количество строк
 ;
 ; Возвращаемое значение: --//--
 ;
 ; Ожидаемое состояние: CF = 0
 ;
-; Испорченные регистры: ax, cx, di, bx
+; Испорченные регистры: ax, cx, di
 ;----------------------------------------------------------------------------------------
 DrawFrame proc
-		mov di, dx
+		mov di, STR_LEN
 		and di, 0fffeh
 		neg di
 		add di, 72d
 
-		mov ax, si
+		mov ax, REG_NUM
 		inc ax
 		shr ax, 1
 		neg ax
@@ -148,12 +137,11 @@ DrawFrame proc
 		push di
 		mov al, cs: byte ptr [BACKGROUND_SYM]
 		mov ah, cs: byte ptr [FRAME_CLR]
-		mov cx, dx
+		mov cx, STR_LEN
 		add cx, 8
 		rep stosw
 		pop di
 
-		add si, 2
 		xor bx, bx
     	@@Next:         inc bx
 			add di, 160d
@@ -164,7 +152,7 @@ DrawFrame proc
 			cmp bx, 1
 			je @@TOP1
 
-				cmp bx, si
+				cmp bx, REG_NUM+2
 				je @@DOWN1
 
                         mov al, cs: byte ptr [FRAME_L]
@@ -183,7 +171,7 @@ DrawFrame proc
 			cmp bx, 1
 			je @@TOP2
 
-				cmp bx, si
+				cmp bx, REG_NUM+2
 				je @@DOWN2
 
 					mov al, cs: byte ptr [BACKGROUND_SYM]
@@ -197,14 +185,14 @@ DrawFrame proc
 
 	     @@SubNext: jmp @@Next
 
-		@@CNT2: mov cx, dx
+		@@CNT2: mov cx, STR_LEN
 			add cx, 2
 			rep stosw
 
 			cmp bx, 1
 			je @@TOP3
 
-				cmp bx, si
+				cmp bx,  REG_NUM+2
 				je @@DOWN3
 
 					mov al, cs: byte ptr [FRAME_R]
@@ -223,13 +211,12 @@ DrawFrame proc
 			rep stosw
 
 			pop di
-		cmp bx, si
+		cmp bx,  REG_NUM+2
 		jb @@SubNext
 
-                sub si, 2
 		add di, 160d
 		mov al, cs: byte ptr [BACKGROUND_SYM]
-		mov cx, dx
+		mov cx, STR_LEN
 		add cx, 8
 		rep stosw
 
@@ -249,44 +236,44 @@ DrawFrame endp
 ; Испорченные регистры: ax bx cx dx bp di si
 ;-----------------------------------------------------------------------------------------
 WriteStr proc
-		mov ax, si
+                mov ax, REG_NUM
 		add ax, 1
 		shr ax, 1
 		neg ax
 		add ax, 12d
                 mov bx, 160d
-                mul bl                 ;  ax = 160d*(12d-((si+1)//2))
-		mov di, dx
+                mul bl                  ;  ax = 160d*(12d-((si+1)//2))
+		mov di, STR_LEN
 		and di, 0fffeh
 		neg di
 		add di, 80d		  	   ; di = 80-(dx%2)*2
-		add ax, di             ; ax = 80-(dx%2)*2+160d*(12d-((si+1)//2))
-                mov di, ax             ;| устанавливаем смещение для первого символа строки
+		add ax, di              ; ax = 80-(dx%2)*2+160d*(12d-((si+1)//2))
+                mov di, ax              ;| устанавливаем смещение для первого символа строки
 
-                mov bp, offset AX_TEXT
-                xor cx, cx
+                mov si, offset REG_NAMES
+                xor dx, dx              ; - counter
 
+                mov bp, sp
+                add bp, 4               ; skip ret ptr
         @@Next:         mov ah, cs: byte ptr [STRING_CLR]
-                        mov al, cs: byte ptr [bp]
+                        mov al, cs: byte ptr [si]
                         mov es: word ptr [di], ax
 
                         add di, 2
-                        inc bp
+                        inc si
 
-                        mov al, cs: byte ptr [bp]
+                        mov al, cs: byte ptr [si]
                         mov es: word ptr [di], ax
 
                         add di, 4
-                        inc bp
+                        inc si
 
-                        push cx
                         ShowWord
-                        pop cx
-                        add bp, 2
+                        add bp, 2d      ; go to the value of the next register's
 
                         add di, (80-7)*2
-                        inc cx
-                cmp cx, si
+                        inc dx
+                cmp dx, REG_NUM
                 jb @@Next
 
                 ret
@@ -302,38 +289,38 @@ WriteStr endp
 ; Испорченные регистры: al + см. описание стандартного 09h DOS прерывания
 ;---------------------------------------------------------------------------------------
 New09   proc
-        ; Считываем скан код вводимого символа и сохраняем в стеке перед вызовом стандартного прерывания
-        in al, 60h
-        push ax
-
-        ; Вызываем стандартное прерывание 08h
-        pushf                   ; Сохраняем так как call этого не делает, а в конце стандартного обработчика стоит iret
-        call dword ptr cs:[Old_09]
-
-        pop ax
+        in  al, 60h
         cmp al, 1Dh     ; ScanCode(Нажатие    Ctrl)
         jne  @@NOT_C
-            mov cs: byte ptr [CTRL_FLAG], 1
-            jmp @@EOI
+                mov cs: byte ptr [CTRL_FLAG], 1
+                jmp @@CTRL
 @@NOT_C:cmp al, 21h     ; ScanCode(Нажатие       F)
         jne @@N_HK
-            cmp cs: byte ptr [CTRL_FLAG], 1
-            jne @@N_HK
-                mov cs: byte ptr [F_FLAG], 1
                 jmp @@HK
 
-@@N_HK: mov cs: byte ptr [CTRL_FLAG], 0
-        mov cs: byte ptr [F_FLAG], 0
+@@N_HK: ; Вызываем стандартное прерывание 08h
+        mov cs: byte ptr [CTRL_FLAG], 0
+
+@@CTRL: pushf           ; Сохраняем так как call этого не делает, а в конце стандартного обработчика стоит iret
+        call dword ptr cs:[Old_09]
 
         jmp @@EOI
 
-@@HK:   mov al, cs: byte ptr [CTRL_FLAG]
-        and al, cs: byte ptr [F_FLAG]
-        cmp al, 1
+@@HK:   cmp cs: byte ptr [CTRL_FLAG], 1
         jne @@N_HK
 
         ; Change RenderingFlag
         xor cs: byte ptr [R_FLAG], 1
+
+        in   al, 60h
+        mov  ah, al
+        or   al, 80h
+        out  61h, al
+        xchg ah, al
+        out  61h, al
+
+        mov al, 20h
+        out 20h, al
 
 @@EOI:  iret
 New09   endp
@@ -343,7 +330,6 @@ New09   endp
 
 ;~~~~~~~~~~~FLAGS~~~~~~~~~~~
 R_FLAG          db 0 ; Rendering Flag
-F_FLAG          db 0
 CTRL_FLAG       db 0
 
 ;~~~~~~~~OLD~VECTORS~~~~~~~~
@@ -366,38 +352,7 @@ FRAME_CLR       db 03fh
 STRING_CLR      db 030h
 
 ;~~~~~~~~Registers~~~~~~~~~~
-AX_TEXT         db 'ax'
-AX_VAL          dw 1234h
-
-BX_TEXT         db 'bx'
-BX_VAL          dw 5678h
-
-CX_TEXT         db 'cx'
-CX_VAL          dw 9ABCh
-
-DX_TEXT         db 'dx'
-DX_VAL          dw 0DEFh
-
-SI_TEXT         db 'si'
-SI_VAL          dw 0000h
-
-DI_TEXT         db 'di'
-DI_VAL          dw 0000h
-
-SP_TEXT         db 'sp'
-SP_VAL          dw 0000h
-
-DS_TEXT         db 'ds'
-DS_VAL          dw 0000h
-
-ES_TEXT         db 'es'
-ES_VAL          dw 0000h
-
-SS_TEXT         db 'ss'
-SS_VAL          dw 0000h
-
-CS_TEXT         db 'cs'
-CS_VAL          dw 0000h
+REG_NAMES       db 'ax', 'bx', 'cx', 'dx', 'si', 'di', 'bp', 'ds', 'es', 'ss', 'sp', 'cs', 'ip'
 
 EOP:
 
