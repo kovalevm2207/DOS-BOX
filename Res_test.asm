@@ -15,9 +15,9 @@ Start:
         mov     ax, 02222h
         mov     ds, ax
 
-        mov     sp, 04448h  ; = 04444 + place for return address
+        mov     sp, 05559h  ; = 04444 + place for return address
 
-        mov     ax, 05555h
+        mov     ax, 04444h
         mov     ss, ax
 
         mov     ax, 07777h
