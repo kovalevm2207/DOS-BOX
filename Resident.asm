@@ -101,14 +101,25 @@ New08   proc    ; pushf     ; sp = real_sp - 2
         call dword ptr cs:[Old_08]
 
         cmp cs: byte ptr [R_FLAG], 1
-        jne @@EOI
+        jne @@N_HK
 
-        mov ax, 0b800h
+        ; update save_buf with result of compare draw_buf with v_ram
+
+        ; draw frame with registers in draw_buf
+        mov ax, 800h
         mov es, ax
         clc
 
         call DrawFrame
         call WriteStr
+
+        ; drop draw_buf in vram
+        jmp @@EOI
+
+@@N_HK: cmp cs: byte ptr [PREV_R_F], 1
+        jne @@EOI
+                mov cs: byte ptr [PREV_R_F], 0
+                ; drop save_buf in v_ram
 
 @@EOI:  pop ax bx cx dx si di bp ds es ss sp
         sub sp, 6
@@ -342,11 +353,12 @@ New09   endp
 
 ;~~~~~~~~~~~FLAGS~~~~~~~~~~~
 R_FLAG          db 0 ; Rendering Flag
+PREV_R_F        db 0 ; Previous rendering flag value
 CTRL_FLAG       db 0
 
 ;~~~~~~~~OLD~VECTORS~~~~~~~~
-Old_08          dd 1 dup(?)
-Old_09          dd 1 dup(?)
+Old_08          dd 1 dup(0)
+Old_09          dd 1 dup(0)
 
 ;~~~~~~~FRAME~SYMBOLS~~~~~~~
 L_U_CORNER	db 0c9h
@@ -365,6 +377,10 @@ STRING_CLR      db 030h
 
 ;~~~~~~~~Registers~~~~~~~~~~
 REG_NAMES       db 'ax', 'bx', 'cx', 'dx', 'si', 'di', 'bp', 'ds', 'es', 'ss', 'sp', 'ip', 'cs'
+
+;~~~~~~~~~Buffers~~~~~~~~~~~
+DrawBuf         db 2*(4+REG_NUM)*(8+STR_LEN) dup(0)
+SaveBuf         db 2*(4+REG_NUM)*(8+STR_LEN) dup(0)
 
 EOP:
 
