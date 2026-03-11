@@ -19,6 +19,62 @@ change_int_on MACRO int_name
 ENDM
 
 ;---------------------------------------------------------------------------------------
+; UpdateBuf: обновляет SaveBuf, внося в него различия между старым (до int 08h)
+;            DrawBuf и новой VRam в определенных пределах.
+; Входные параметры: --//--
+; Ожидаемое состояние: cs - сегмент с кодом программы Resident.asm
+; Возвращаемое значение: --//--
+; Испорченные регистры: ax, bx, cx, di, si, bp, es
+;---------------------------------------------------------------------------------------
+UpdateBuf MACRO
+        LOCAL @@NextW, @@Skip
+        mov     ax, 0b800h
+        mov     es, ax
+
+        mov     si, offset DrawBuf
+        mov     bp, offset SaveBuf
+
+        mov     di, STR_LEN
+	and     di, 0fffeh
+	neg     di
+	add     di, 72d
+	mov     ax, REG_NUM
+	inc     ax
+	shr     ax, 1
+	neg     ax
+	add     ax, 10d
+	mov     bl, 160d
+	mul     bl
+	add     di, ax          ; 72-(dx//2)*2+160d*(10d-((si+1)//2)
+
+        xor cx, cx
+
+@@NextW:        inc     cx
+
+                mov     ax, cs: word ptr [si]
+                mov     bx, es: word ptr [di]
+
+                cmp     ax, bx
+                je      @@SkipChg
+                        mov     cs: word ptr [bp], bx
+
+     @@SkipChg: add     si, 2
+                add     bp, 2
+                add     di, 2
+
+                mov     ax, cx
+                mov     bl, 4+STR_LEN+4
+                div     bl          ; ah = ax % 4+STR_LEN+4
+
+                cmp     ah, 0
+                jne     @@Cond
+                        add     di, 2*(80-(4+STR_LEN+4))
+
+@@Cond: cmp     cx, (4+REG_NUM)*(8+STR_LEN)
+        jb      @@NextW
+ENDM
+
+;---------------------------------------------------------------------------------------
 ; DropBuf: помещает буфер в текстовую видеопамять в виде прямоугольника
 ; Входные параметры: buf name
 ; Ожидаемое состояние: cs - сегмент с кодом программы Resident.asm
@@ -63,7 +119,6 @@ DropBuf MACRO buf_name
         cmp     cx, REG_NUM+4
         jb      @@NextL
 ENDM
-
 
 ;---------------------------------------------------------------------------------------
 ; ShowWord: выводит в текстовую видеопамять шестнадцатеричное значение числа
@@ -157,17 +212,20 @@ New08   proc    ; pushf     ; sp = real_sp - 2
         call    dword ptr cs:[Old_08]
 
         cmp     cs: byte ptr [R_FLAG], 1
-        jne     @@N_HK
+        jne     @@Lbl
 
         mov     cs: byte ptr [PREV_R_F], 1
 
-        ; update save_buf with result of compare draw_buf with v_ram
+        UpdateBuf               ; update save_buf with result of compare draw_buf with v_ram
 
         mov     ax, cs
         mov     es, ax
         clc
 
-        call    DrawFrame       ; draw frame with registers in draw_buf
+        jmp @@Skip              ; Размещаем промежуточную метку для Jmp
+@@Lbl:  jmp @@N_HK
+
+@@Skip: call    DrawFrame       ; draw frame with registers in draw_buf
         call    WriteStr
 
         DropBuf DrawBuf         ; drop draw_buf in vram
@@ -405,8 +463,8 @@ STRING_CLR      db 030h
 REG_NAMES       db 'ax', 'bx', 'cx', 'dx', 'si', 'di', 'bp', 'ds', 'es', 'ss', 'sp', 'ip', 'cs'
 
 ;~~~~~~~~~Buffers~~~~~~~~~~~
-DrawBuf         db 2*(4+REG_NUM)*(8+STR_LEN) dup(1)
-SaveBuf         db 2*(4+REG_NUM)*(8+STR_LEN) dup(2)
+DrawBuf         dw (4+REG_NUM)*(8+STR_LEN) dup(1)
+SaveBuf         dw (4+REG_NUM)*(8+STR_LEN) dup(2)
 
 EOP:
 
