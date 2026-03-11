@@ -79,8 +79,6 @@ Start:  xor ax, ax
         save_int Old_09
         change_int_on New09
 
-        int 08h
-
         ; Завершаем программу оставляя ее в памяти (резидент)
         mov dx, offset EOP
         int 27h
@@ -105,12 +103,11 @@ New08   proc    ; pushf     ; sp = real_sp - 2
 
         ; update save_buf with result of compare draw_buf with v_ram
 
-        ; draw frame with registers in draw_buf
-        mov ax, 800h
+        mov ax, ds
         mov es, ax
         clc
 
-        call DrawFrame
+        call DrawFrame  ; draw frame with registers in draw_buf
         call WriteStr
 
         ; drop draw_buf in vram
@@ -131,7 +128,7 @@ New08   endp
 
 ;----------------------------------------------------------------------------------------
 ; Описание: (DrawFrame) рисует рамку на нужном месте в видеопамяти
-; Входные параметры: es = 0b800h (Указывает на текстовую видеопамять)
+; Входные параметры: es = ds (Указывает на текстовую видеопамять)
 ;
 ; Возвращаемое значение: --//--
 ;
@@ -140,32 +137,15 @@ New08   endp
 ; Испорченные регистры: ax, cx, di
 ;----------------------------------------------------------------------------------------
 DrawFrame proc
-		mov di, STR_LEN
-		and di, 0fffeh
-		neg di
-		add di, 72d
-
-		mov ax, REG_NUM
-		inc ax
-		shr ax, 1
-		neg ax
-		add ax, 10d
-		mov bl, 160d
-		mul bl
-		add di, ax 	      ; 72-(dx//2)*2+160d*(10d-((si+1)//2)
-
-		push di
+		mov di, offset DrawBuf
 		mov al, cs: byte ptr [BACKGROUND_SYM]
 		mov ah, cs: byte ptr [FRAME_CLR]
 		mov cx, STR_LEN
 		add cx, 8
 		rep stosw
-		pop di
 
 		xor bx, bx
     	@@Next:         inc bx
-			add di, 160d
-			push di
 			mov cx, 2
 			rep stosw
 
@@ -230,11 +210,9 @@ DrawFrame proc
 			mov cx, 2
 			rep stosw
 
-			pop di
 		cmp bx,  REG_NUM+2
 		jb @@SubNext
 
-		add di, 160d
 		mov al, cs: byte ptr [BACKGROUND_SYM]
 		mov cx, STR_LEN
 		add cx, 8
@@ -385,3 +363,19 @@ SaveBuf         db 2*(4+REG_NUM)*(8+STR_LEN) dup(0)
 EOP:
 
 end Start
+
+; Еще понадобится:
+;		mov di, STR_LEN
+;		and di, 0fffeh
+;		neg di
+;		add di, 72d
+;
+;		mov ax, REG_NUM
+;		inc ax
+;		shr ax, 1
+;		neg ax
+;		add ax, 10d
+;		mov bl, 160d
+;		mul bl
+;		add di, ax 	      ; 72-(dx//2)*2+160d*(10d-((si+1)//2)
+;
