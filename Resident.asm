@@ -26,6 +26,7 @@ ENDM
 ; Испорченные регистры: ax, cx, dx, si, di, es
 ;---------------------------------------------------------------------------------------
 DropBuf MACRO buf_name
+        LOCAL @@NextL, @@NextS
         mov     si, 0b800h
         mov     es, si
 
@@ -158,6 +159,8 @@ New08   proc    ; pushf     ; sp = real_sp - 2
         cmp     cs: byte ptr [R_FLAG], 1
         jne     @@N_HK
 
+        mov     cs: byte ptr [PREV_R_F], 1
+
         ; update save_buf with result of compare draw_buf with v_ram
 
         mov     ax, cs
@@ -173,7 +176,7 @@ New08   proc    ; pushf     ; sp = real_sp - 2
 @@N_HK: cmp     cs: byte ptr [PREV_R_F], 1
         jne     @@EOI
                 mov     cs: byte ptr [PREV_R_F], 0
-                ; drop save_buf in v_ram
+                DropBuf SaveBuf ; drop save_buf in v_ram
 
 @@EOI:  pop     ax bx cx dx si di bp ds es ss
         add     sp, 2           ; skip sp-6 to correct work of program
