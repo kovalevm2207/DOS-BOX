@@ -364,7 +364,7 @@ FRAME_CLR       db 03fh
 STRING_CLR      db 030h
 
 ;~~~~~~~~Registers~~~~~~~~~~
-REG_NAMES       db 'ax', 'bx', 'cx', 'dx', 'si', 'di', 'bp', 'ds', 'es', 'ss', 'sp', 'cs', 'ip'
+REG_NAMES       db 'ax', 'bx', 'cx', 'dx', 'si', 'di', 'bp', 'ds', 'es', 'ss', 'sp', 'ip', 'cs'
 
 EOP:
 
