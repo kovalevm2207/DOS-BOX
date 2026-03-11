@@ -128,7 +128,7 @@ New08   endp
 
 ;----------------------------------------------------------------------------------------
 ; Описание: (DrawFrame) рисует рамку на нужном месте в видеопамяти
-; Входные параметры: es = ds (Указывает на текстовую видеопамять)
+; Входные параметры: es = ds
 ;
 ; Возвращаемое значение: --//--
 ;
@@ -140,9 +140,9 @@ DrawFrame proc
 		mov di, offset DrawBuf
 		mov al, cs: byte ptr [BACKGROUND_SYM]
 		mov ah, cs: byte ptr [FRAME_CLR]
-		mov cx, STR_LEN
+                mov cx, STR_LEN
 		add cx, 8
-		rep stosw
+                rep stosw
 
 		xor bx, bx
     	@@Next:         inc bx
@@ -224,29 +224,17 @@ DrawFrame endp
 ;-----------------------------------------------------------------------------------------
 ; Описание: по центру экрана выводит строчку с соответствующим фоном
 ;
-; Входные параметры: es = 0b800h (Указывает на текстовую видеопамять)
-;					 si - количество строк
+; Входные параметры: es = ds
 ;
 ; Возвращаемое значение: --//--
 ;
-; Ожидаемое состояние: на середине экрана видна строчка с заданным фоном
+; Ожидаемое состояние: CF = 0
 ;
 ; Испорченные регистры: ax bx cx dx bp di si
 ;-----------------------------------------------------------------------------------------
 WriteStr proc
-                mov ax, REG_NUM
-		add ax, 1
-		shr ax, 1
-		neg ax
-		add ax, 12d
-                mov bx, 160d
-                mul bl                  ;  ax = 160d*(12d-((si+1)//2))
-		mov di, STR_LEN
-		and di, 0fffeh
-		neg di
-		add di, 80d		  	   ; di = 80-(dx%2)*2
-		add ax, di              ; ax = 80-(dx%2)*2+160d*(12d-((si+1)//2))
-                mov di, ax              ;| устанавливаем смещение для первого символа строки
+                mov di, offset DrawBuffer
+                add di, (4+STR_LEN+4)*2+4       ; устанавливаем смещение для первого символа строки
 
                 mov si, offset REG_NAMES
                 xor dx, dx              ; - counter
@@ -269,7 +257,7 @@ WriteStr proc
                         ShowWord
                         add bp, 2      ; go to the value of the next register's
 
-                        add di, (80-7)*2
+                        add di, 8
                         inc dx
                 cmp dx, REG_NUM
                 jb @@Next
