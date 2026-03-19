@@ -5,6 +5,18 @@
 org 100h
 
 Start:
+        mov     di, offset ST_CPY
+        mov     si, 7777h
+        mov     es, si
+        mov     si, 6666h
+
+        Next:   mov     al, cs: byte ptr [di]
+                mov     es: byte ptr [si], al
+                inc     di
+                inc     si
+        cmp     di, offset END_CPY
+        jbe     Next
+
         mov     bx, 0BBBBh
         mov     cx, 0CCCCh
         mov     dx, 0DDDDh
@@ -23,11 +35,6 @@ Start:
         mov     ax, 07777h
         mov     es, ax
 
-        mov     es: word ptr [06666h],      060E4h        ; in  al, 60h
-        mov     es: word ptr [06666h+2h],   0013Ch        ; cmp al, 01h
-        mov     es: word ptr [06666h+4h],   0F875h        ; jne -8d         (jne 07777h:06666h)
-        mov     es: byte ptr [06666h+6h],   0CBh          ; retf
-
         mov     ax, 03333h
         mov     es, ax
 
@@ -45,13 +52,14 @@ Start:
         mov     ax, 0AAAAh
         retf
 
-;AGAIN: in  al, 60h
-;       cmp al, 1   ; ScanCode(Esc)
-;       jne AGAIN
-;
-;       retf
-
 I_Ptr:  mov     ah, 04ch
         int     21h
+
+ST_CPY: in  al, 60h
+        cmp al, 1   ; ScanCode(Esc)
+        jne ST_CPY
+
+        retf
+END_CPY:
 
 End Start
